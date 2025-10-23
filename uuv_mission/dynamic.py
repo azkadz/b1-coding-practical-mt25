@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 import matplotlib.pyplot as plt
 from .terrain import generate_reference_and_limits
+import pandas as pd
+import os
 
 class Submarine:
     def __init__(self):
@@ -76,7 +78,24 @@ class Mission:
     @classmethod
     def from_csv(cls, file_name: str):
         # You are required to implement this method
-        pass
+        # Check if the file exists
+        if not os.path.isfile(file_name):
+            raise FileNotFoundError(f"No such file: '{file_name}'")
+        
+        df = pd.read_csv(file_name)
+
+        if df.empty:
+            raise ValueError("CSV file is empty")
+        
+        try:
+            reference = df['reference'].to_numpy(dtype=float)
+            cave_height = df['cave_height'].to_numpy(dtype=float)
+            cave_depth = df['cave_depth'].to_numpy(dtype=float)
+
+        except Exception as e:
+            raise ValueError(f"Failed to parse numeric values from CSV: {e}")
+
+        return cls(reference, cave_height, cave_depth)
 
 
 class ClosedLoop:
@@ -94,11 +113,22 @@ class ClosedLoop:
         actions = np.zeros(T)
         self.plant.reset_state()
 
+        # Set previous error as zero
+        e_prev = 0.0
+
+
         for t in range(T):
             positions[t] = self.plant.get_position()
             observation_t = self.plant.get_depth()
+            
             # Call your controller here
+            e_t = mission.reference[t] - observation_t
+
+            actions[t] = self.controller(e_t, e_prev)
+
             self.plant.transition(actions[t], disturbances[t])
+            
+            e_prev = e_t
 
         return Trajectory(positions)
         
